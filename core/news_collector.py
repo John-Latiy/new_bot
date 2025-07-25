@@ -24,7 +24,7 @@ BAD_WORDS = ["курс", "подпишись", "промокод", "обучен
 def is_advertisement(text: str) -> bool:
     return any(bad_word.lower() in text.lower() for bad_word in BAD_WORDS)
 
-async def fetch_new_posts(start_time=None, end_time=None, limit_per_channel=5):
+async def fetch_new_posts(start_time=None, end_time=None, limit_per_channel=20):
     new_posts = []
 
     await client.start()
