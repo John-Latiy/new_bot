@@ -3,3 +3,5 @@ openai
 telethon
 Pillow
 requests
+pytz
+APScheduler
