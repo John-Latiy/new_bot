@@ -1,0 +1,12 @@
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
+/bin/bash: /Users/evgenijlatij/Desktop/me_code/news_bot/run_bot.sh: Operation not permitted
