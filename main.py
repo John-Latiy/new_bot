@@ -51,8 +51,7 @@ async def main():
 
     # Генерация промпта для изображения
     print("🎨 Генерация промпта...")
-    disclaimer = "(This image is for informational and artistic purposes only. It does not promote violence, politics, or any sensitive content.) "
-    prompt = disclaimer + generate_image_prompt(summary)
+    prompt = generate_image_prompt(summary)
     print(f"\n🧠 GPT промпт:\n{prompt}\n")
 
     # Генерация изображения

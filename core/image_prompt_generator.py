@@ -6,28 +6,28 @@ from config.settings import OPENAI_API_KEY
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 SYSTEM_PROMPT = """
-Ты — профессиональный AI-художник, создающий визуальные обложки для постов о финансах, экономике, криптовалютах и фондовом рынке.
+Ты помощник для поиска изображений. На основе финансовой сводки создай текст, который поможет найти подходящее изображение.
 
-На основе текста поста ты должен придумать красивый, атмосферный, насыщенный визуальный промпт для генерации изображения в стиле DALL·E 3.
+Сосредоточься на основных темах новостей: финансы, экономика, криптовалюты, фондовый рынок, банки, инвестиции, технологии, промышленность.
 
-Не пиши текст на изображении. Используй конкретику: графики, фонды, доллар, банк, завод, спутник, монеты, фондовый рынок, нефть, здание ЦБ — то, что визуально покажет суть новости. Придерживайся художественного и современного стиля. Обязательно указывай: “no text, no words, no captions”.
+Создай короткое описание (1-2 предложения) основной темы новостей для последующего поиска изображения.
 
 Формат ответа:
-[только строка-промпт для DALL·E 3]
+[краткое описание темы новостей]
 """
 
+
 def generate_image_prompt(post_text: str) -> str:
-    disclaimer = "(This image is for informational and artistic purposes only. It does not promote violence, politics, or any sensitive content.) "
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            temperature=0.8,
+            temperature=0.5,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": disclaimer + post_text}
+                {"role": "user", "content": post_text}
             ]
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         print(f"❌ Ошибка генерации промпта: {e}")
-        return "Abstract finance chart with blue-orange colors, no text"
+        return "Financial news and market analysis"
