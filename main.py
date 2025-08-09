@@ -9,6 +9,7 @@ from core.image_generator import generate_image
 from core.publisher import publish_to_telegram
 from core.instagram_publisher import publish_to_instagram
 from core.freeimage_uploader import upload_to_freeimage
+from utils.post_logger import log_post_event
 
 
 def parse_args():
@@ -38,7 +39,23 @@ async def main():
     )
     if not raw_posts:
         print("⚠️ Нет новостей за указанный период.")
+        log_post_event({
+            "mode": mode,
+            "stage": "collect",
+            "status": "no_posts",
+            "start_time": str(start_time),
+            "end_time": str(end_time),
+        })
         return
+    else:
+        log_post_event({
+            "mode": mode,
+            "stage": "collect",
+            "status": "ok",
+            "count": len(raw_posts),
+            "start_time": str(start_time),
+            "end_time": str(end_time),
+        })
 
     # Генерация текста
     print("📝 GPT формирует связную сводку...")
@@ -47,12 +64,32 @@ async def main():
         print(f"\n📢 Сформированная сводка:\n\n{summary}\n")
     except Exception as e:
         print(f"⚠️ Ошибка генерации сводки: {e}\n")
+        log_post_event({
+            "mode": mode,
+            "stage": "summary",
+            "status": "error",
+            "error": str(e),
+        })
         return
+    # Логируем успешную генерацию сводки
+    log_post_event({
+        "mode": mode,
+        "stage": "summary",
+        "status": "ok",
+        "chars": len(summary or ""),
+    })
 
     # Генерация промпта для изображения
     print("🎨 Генерация промпта...")
     prompt = generate_image_prompt(summary)
     print(f"\n🧠 GPT промпт:\n{prompt}\n")
+    log_post_event({
+        "mode": mode,
+        "stage": "prompt",
+        "status": "ok",
+        "chars": len(prompt or ""),
+        "sample": (prompt or "")[:160],
+    })
 
     # Генерация изображения
     image_path = "data/final_cover.png"
@@ -62,6 +99,12 @@ async def main():
         print(f"✅ Обложка сохранена: {image_path}\n")
     except Exception as e:
         print(f"❌ Ошибка генерации обложки, прерывание публикации.\n{e}")
+        log_post_event({
+            "mode": mode,
+            "stage": "image",
+            "status": "error",
+            "error": str(e),
+        })
         return
 
     # Загрузка изображения на FreeImage.host
@@ -71,7 +114,19 @@ async def main():
         print(f"🔗 Ссылка на изображение: {image_url}\n")
     except Exception as e:
         print(f"❌ Ошибка загрузки на хостинг: {e}")
+        log_post_event({
+            "mode": mode,
+            "stage": "upload",
+            "status": "error",
+            "error": str(e),
+        })
         return
+    log_post_event({
+        "mode": mode,
+        "stage": "upload",
+        "status": "ok",
+        "image_url": image_url,
+    })
 
     # Публикация в Telegram
     print("📣 Публикация в Telegram...")
@@ -80,6 +135,18 @@ async def main():
         print("✅ Пост опубликован в Telegram")
     except Exception as e:
         print(f"❌ Ошибка публикации в Telegram: {e}")
+        log_post_event({
+            "mode": mode,
+            "stage": "telegram",
+            "status": "error",
+            "error": str(e),
+        })
+    else:
+        log_post_event({
+            "mode": mode,
+            "stage": "telegram",
+            "status": "ok",
+        })
 
     # Публикация в Instagram
     print("📸 Публикация в Instagram...")
@@ -88,6 +155,30 @@ async def main():
         print("✅ Пост опубликован в Instagram")
     except Exception as e:
         print(f"❌ Ошибка публикации в Instagram: {e}")
+        log_post_event({
+            "mode": mode,
+            "stage": "instagram",
+            "status": "error",
+            "error": str(e),
+        })
+        return
+    else:
+        log_post_event({
+            "mode": mode,
+            "stage": "instagram",
+            "status": "ok",
+        })
+
+    # Финальный успешный лог
+    log_post_event({
+        "mode": mode,
+        "stage": "done",
+        "status": "success",
+        "start_time": str(start_time),
+        "end_time": str(end_time),
+        "image_path": image_path,
+        "image_url": image_url,
+    })
 
 
 if __name__ == "__main__":
