@@ -5,6 +5,7 @@ import requests
 from openai import OpenAI
 
 from config.settings import OPENAI_API_KEY, PEXELS_API_KEY
+from utils.image_registry import is_used, mark_used
 
 
 # Клиент OpenAI для генерации поисковых запросов
@@ -59,16 +60,23 @@ def search_pexels_image(query: str) -> str:
         data = resp.json()
         photos = data.get("photos") or []
         if photos:
-            src = photos[0].get("src") or {}
-            image_url = (
-                src.get("large2x")
-                or src.get("large")
-                or src.get("medium")
-                or src.get("original")
-            )
-            if image_url:
-                print(f"Найдено изображение: {image_url}")
-                return image_url
+            # выбирать первый неиспользованный ранее кадр
+            for p in photos:
+                image_id = str(p.get("id"))
+                if image_id and is_used("pexels", image_id):
+                    continue
+                src = p.get("src") or {}
+                image_url = (
+                    src.get("large2x")
+                    or src.get("large")
+                    or src.get("medium")
+                    or src.get("original")
+                )
+                if image_url:
+                    print(f"Найдено изображение: {image_url}")
+                    # отметим как использованное
+                    mark_used("pexels", image_id or "", image_url, query)
+                    return image_url
 
         print("Изображения не найдены, используем запасной вариант")
         return (
