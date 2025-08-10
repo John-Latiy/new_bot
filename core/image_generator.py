@@ -5,11 +5,7 @@ import re
 import requests
 from openai import OpenAI
 
-from config.settings import (
-    OPENAI_API_KEY,
-    PEXELS_API_KEY,
-    PIXABAY_API_KEY,
-)
+from config.settings import OPENAI_API_KEY, PIXABAY_API_KEY
 from utils.image_registry import is_used, mark_used
 
 
@@ -120,59 +116,9 @@ def generate_search_query(summary: str) -> str:
         return "finance business"
 
 
-def search_pexels_image(query: str) -> str:
-    """Ищет изображение на Pexels и возвращает прямой URL."""
-    try:
-        url = "https://api.pexels.com/v1/search"
-        headers = {"Authorization": PEXELS_API_KEY or ""}
-        params = {
-            "query": enrich_query(query),
-            "per_page": 15,
-            "orientation": "square",
-            "size": "large",
-        }
-
-        resp = requests.get(
-            url, headers=headers, params=params, timeout=20
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        photos = data.get("photos") or []
-        if photos:
-            # выбирать первый неиспользованный ранее кадр
-            for p in photos:
-                image_id = str(p.get("id"))
-                if image_id and is_used("pexels", image_id):
-                    continue
-                src = p.get("src") or {}
-                alt = p.get("alt") or ""
-                # Фильтрация по описанию
-                if (
-                    has_blacklisted(alt)
-                    or not is_finance_related(alt + " " + query)
-                ):
-                    continue
-                image_url = (
-                    src.get("large2x")
-                    or src.get("large")
-                    or src.get("medium")
-                    or src.get("original")
-                )
-                if image_url:
-                    print(f"Найдено изображение: {image_url}")
-                    # отметим как использованное
-                    mark_used("pexels", image_id or "", image_url, query)
-                    return image_url
-
-        print("Изображения не найдены, используем запасной вариант")
-        return (
-            "https://images.pexels.com/photos/210607/pexels-photo-210607.jpeg"
-        )
-    except Exception as exc:
-        print(f"Ошибка поиска в Pexels: {exc}")
-        return (
-            "https://images.pexels.com/photos/210607/pexels-photo-210607.jpeg"
-        )
+"""
+Оставлена только интеграция с Pixabay. Путь Pexels удалён.
+"""
 
 
 def search_pixabay_image(query: str) -> str:
@@ -231,23 +177,11 @@ def search_pixabay_image(query: str) -> str:
 def generate_image(
     prompt: str, filename: str = "data/final_cover.png"
 ) -> Optional[str]:
-    """Находит изображение (Pixabay → Pexels фолбэк) и сохраняет локально."""
+    """Находит изображение в Pixabay и сохраняет локально."""
     try:
-        print("Поиск изображения (Pixabay → Pexels)...")
+        print("Поиск изображения (Pixabay)...")
         search_query = generate_search_query(prompt)
-        image_url = None
-        # Сначала пробуем Pixabay (есть валидный ключ)
-        if PIXABAY_API_KEY:
-            image_url = search_pixabay_image(search_query)
-        # Если не удалось или ключа нет — пробуем Pexels
-        if not image_url and PEXELS_API_KEY:
-            image_url = search_pexels_image(search_query)
-        # Если всё пусто — финальный фолбэк
-        if not image_url:
-            image_url = (
-                "https://cdn.pixabay.com/photo/2016/11/18/15/49/"
-                "chart-1839518_1280.jpg"
-            )
+        image_url = search_pixabay_image(search_query)
 
         print("Загружаем изображение...")
         resp = requests.get(image_url, timeout=30)

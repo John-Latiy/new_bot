@@ -25,8 +25,5 @@ FREEIMAGE_API_KEY = os.getenv("FREEIMAGE_API_KEY")
 # Unsplash (legacy)
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
 
-# Pexels
-PEXELS_API_KEY = os.getenv("PEXELS_API_KEY")
-
 # Pixabay
 PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")

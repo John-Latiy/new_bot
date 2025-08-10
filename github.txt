@@ -1,0 +1,7 @@
+	1.	Если НЕ хочешь сохранять локальные изменения:
+git fetch
+git reset --hard origin/main
+
+После этого — снова пересобирай Docker-образ:
+
+sudo docker build -t new_bot .
