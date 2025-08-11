@@ -1,15 +1,29 @@
-import requests
 import os
+import requests
+from pathlib import Path
 
 from dotenv import load_dotenv
-load_dotenv()
+from config.settings import PROJECT_ROOT  # ensure same .env loading behavior
+
+# Explicitly load .env from project root for cron safety
+load_dotenv(PROJECT_ROOT / ".env")
 
 FREEIMAGE_API_KEY = os.getenv("FREEIMAGE_API_KEY")
+
 
 def upload_to_freeimage(image_path: str) -> str:
     """
     Загружает изображение на https://freeimage.host и возвращает прямую ссылку.
     """
+    if not image_path:
+        raise ValueError(
+            "Image path is empty. Image generation likely failed."
+        )
+    if not FREEIMAGE_API_KEY:
+        raise RuntimeError("FREEIMAGE_API_KEY is missing. Set it in .env")
+    if not Path(image_path).exists():
+        raise FileNotFoundError(f"Image file not found: {image_path}")
+
     print("☁️ Загружаем обложку на FreeImage.host...")
 
     api_url = "https://freeimage.host/api/1/upload"
@@ -30,6 +44,10 @@ def upload_to_freeimage(image_path: str) -> str:
             print(f"🔗 Ссылка на изображение: {image_url}")
             return image_url
         else:
-            raise Exception(f"❌ Ошибка: неожиданный формат ответа: {response.text}")
+            raise Exception(
+                f"❌ Ошибка: неожиданный формат ответа: {response.text}"
+            )
     else:
-        raise Exception(f"❌ Ошибка загрузки на хостинг: {response.text}")
+        raise Exception(
+            f"❌ Ошибка загрузки на хостинг: {response.text}"
+        )

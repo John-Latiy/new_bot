@@ -124,6 +124,8 @@ def generate_search_query(summary: str) -> str:
 def search_pixabay_image(query: str) -> str:
     """Ищет изображение на Pixabay и возвращает прямой URL."""
     try:
+        if not (PIXABAY_API_KEY and PIXABAY_API_KEY.strip()):
+            raise RuntimeError("PIXABAY_API_KEY is missing. Set it in .env")
         url = "https://pixabay.com/api/"
         params = {
             "key": PIXABAY_API_KEY or "",
@@ -161,17 +163,11 @@ def search_pixabay_image(query: str) -> str:
                     print(f"Найдено изображение (Pixabay): {image_url}")
                     mark_used("pixabay", image_id or "", image_url, query)
                     return image_url
-        print("Pixabay: изображения не найдены, используем запасной вариант")
-        return (
-            "https://cdn.pixabay.com/photo/2016/11/18/15/49/"
-            "chart-1839518_1280.jpg"
-        )
+        print("Pixabay: изображения не найдены")
+        raise RuntimeError("No suitable Pixabay images found for query")
     except Exception as exc:
         print(f"Ошибка поиска в Pixabay: {exc}")
-        return (
-            "https://cdn.pixabay.com/photo/2016/11/18/15/49/"
-            "chart-1839518_1280.jpg"
-        )
+        raise
 
 
 def generate_image(
