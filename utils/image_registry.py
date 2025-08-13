@@ -1,6 +1,7 @@
 import os
 import sqlite3
 from typing import Optional
+import hashlib
 
 
 DB_PATH = os.path.join("data", "processed.db")
@@ -19,6 +20,17 @@ def _ensure_db() -> None:
                 query TEXT,
                 used_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(provider, image_id)
+            );
+            """
+        )
+        # Таблица для уже сохранённых локальных файлов (по имени)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS saved_files (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL UNIQUE,
+                file_hash TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
             """
         )
@@ -52,5 +64,31 @@ def mark_used(
                 "provider, image_id, image_url, query) VALUES(?, ?, ?, ?)"
             ),
             (provider, image_id, image_url, query),
+        )
+        conn.commit()
+
+
+def is_file_saved(filename: str) -> bool:
+    _ensure_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            "SELECT 1 FROM saved_files WHERE filename=? LIMIT 1", (filename,)
+        )
+        return cur.fetchone() is not None
+
+
+def mark_file_saved(filename: str) -> None:
+    _ensure_db()
+    # Опционально считаем хэш, чтобы при совпадении содержимого можно анализировать
+    file_hash = None
+    try:
+        with open(filename, 'rb') as f:
+            file_hash = hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        pass
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO saved_files(filename, file_hash) VALUES(?, ?)",
+            (filename, file_hash),
         )
         conn.commit()

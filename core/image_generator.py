@@ -1,12 +1,18 @@
 import os
-from typing import Optional
 import re
+import random
+from typing import Optional
 
 import requests
 from openai import OpenAI
 
-from config.settings import OPENAI_API_KEY, PIXABAY_API_KEY
-from utils.image_registry import is_used, mark_used
+from config.settings import OPENAI_API_KEY, PIXABAY_API_KEY, MAX_COVERS
+from utils.image_registry import (
+    is_used,
+    mark_used,
+    is_file_saved,
+    mark_file_saved,
+)
 
 
 # Клиент OpenAI для генерации поисковых запросов
@@ -121,8 +127,36 @@ def generate_search_query(summary: str) -> str:
 """
 
 
+def _expand_query_variants(base: str) -> list:
+    base = enrich_query(base)
+    extras = [
+        "trading floor",
+        "candlestick chart",
+        "stock market",
+        "financial markets",
+        "banking",
+        "forex trading",
+    ]
+    variants = [base]
+    for e in extras:
+        if e.lower() not in base.lower():
+            variants.append(f"{base} {e}"[:80])
+    # Deduplicate preserving order
+    seen = set()
+    uniq = []
+    for v in variants:
+        k = v.lower()
+        if k not in seen:
+            seen.add(k)
+            uniq.append(v)
+    return uniq[:6]
+
+
 def search_pixabay_image(query: str) -> str:
-    """Ищет изображение на Pixabay и возвращает прямой URL."""
+    """Ищет изображение на Pixabay и возвращает прямой URL.
+    Улучшено: собираем все новые подходящие изображения и случайно
+    выбираем одно, чтобы снизить повторяемость.
+    """
     try:
         if not (PIXABAY_API_KEY and PIXABAY_API_KEY.strip()):
             raise RuntimeError("PIXABAY_API_KEY is missing. Set it in .env")
@@ -138,21 +172,27 @@ def search_pixabay_image(query: str) -> str:
             "category": "business",
             "lang": "en",
         }
-        resp = requests.get(url, params=params, timeout=20)
-        resp.raise_for_status()
-        data = resp.json()
-        hits = data.get("hits") or []
-        if hits:
+        variants = _expand_query_variants(query)
+        total_used_skipped = 0
+        for idx, variant in enumerate(variants, 1):
+            pv = {**params, "q": variant}
+            try:
+                resp = requests.get(url, params=pv, timeout=20)
+                resp.raise_for_status()
+            except Exception as e:
+                print(f"⚠️ Ошибка запроса Pixabay (вариант {idx}/{len(variants)}: '{variant}'): {e}")
+                continue
+            data = resp.json()
+            hits = data.get("hits") or []
+            candidates = []
+            used_skipped = 0
             for h in hits:
                 image_id = str(h.get("id"))
                 if image_id and is_used("pixabay", image_id):
+                    used_skipped += 1
                     continue
                 tags = h.get("tags") or ""
-                # Фильтрация по тегам
-                if (
-                    has_blacklisted(tags)
-                    or not is_finance_related(tags + " " + query)
-                ):
+                if has_blacklisted(tags) or not is_finance_related(tags + " " + variant):
                     continue
                 image_url = (
                     h.get("largeImageURL")
@@ -160,11 +200,22 @@ def search_pixabay_image(query: str) -> str:
                     or h.get("previewURL")
                 )
                 if image_url:
-                    print(f"Найдено изображение (Pixabay): {image_url}")
-                    mark_used("pixabay", image_id or "", image_url, query)
-                    return image_url
-        print("Pixabay: изображения не найдены")
-        raise RuntimeError("No suitable Pixabay images found for query")
+                    candidates.append((image_id, image_url))
+            total_used_skipped += used_skipped
+            if candidates:
+                random.shuffle(candidates)
+                image_id, image_url = candidates[0]
+                print(
+                    f"Найдено изображение (Pixabay): {image_url} | вариант запроса {idx}/{len(variants)} '{variant}', кандидатов: {len(candidates)}, пропущено ранее использованных: {used_skipped}, суммарно пропущено: {total_used_skipped}"
+                )
+                mark_used("pixabay", image_id or "", image_url, variant)
+                return image_url
+            else:
+                print(f"Вариант '{variant}' не дал новых изображений (used skipped={used_skipped}).")
+        print(
+            f"Pixabay: не найдено новых изображений. Всего пропущено уже использованных: {total_used_skipped}."
+        )
+        raise RuntimeError("No suitable Pixabay images found for query (all variants exhausted)")
     except Exception as exc:
         print(f"Ошибка поиска в Pixabay: {exc}")
         raise
@@ -173,7 +224,10 @@ def search_pixabay_image(query: str) -> str:
 def generate_image(
     prompt: str, filename: str = "data/final_cover.png"
 ) -> Optional[str]:
-    """Находит изображение в Pixabay и сохраняет локально."""
+    """Находит изображение в Pixabay и сохраняет локально.
+    Теперь сохраняем под уникальным именем вида data/covers/<id>.png, а
+    также обновляем симлинк/копию final_cover.png для совместимости.
+    """
     try:
         print("Поиск изображения (Pixabay)...")
         search_query = generate_search_query(prompt)
@@ -183,11 +237,51 @@ def generate_image(
         resp = requests.get(image_url, timeout=30)
         resp.raise_for_status()
 
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
-        with open(filename, "wb") as f:
-            f.write(resp.content)
+        # Определяем уникальное имя
+        os.makedirs("data/covers", exist_ok=True)
+        # Извлечём id из URL (цифры перед _1280 / .jpg) как image_id
+        uniq_id = None
+        match = re.search(r"/(g?[0-9a-f]{10,}|\d+)_\d+\.jpg", image_url)
+        if match:
+            uniq_id = match.group(1)
+        if not uniq_id:
+            uniq_id = re.sub(r"\W+", "", search_query.lower())[:20]
+        unique_name = f"data/covers/{uniq_id}.png"
 
-        print(f"Изображение сохранено: {filename}")
+        with open(unique_name, "wb") as f:
+            f.write(resp.content)
+        mark_file_saved(unique_name)
+
+        # Синхронизируем совместимый путь final_cover.png
+        try:
+            # Копируем (не ссылка) чтобы внешние загрузчики работали одинаково
+            import shutil
+            shutil.copyfile(unique_name, filename)
+        except Exception as _e:
+            pass
+
+        # Ротация: ограничиваем число файлов в data/covers
+        try:
+            covers = sorted(
+                [
+                    os.path.join("data/covers", f)
+                    for f in os.listdir("data/covers")
+                    if f.lower().endswith(".png")
+                ],
+                key=lambda p: os.path.getmtime(p),
+            )
+            if len(covers) > MAX_COVERS:
+                to_delete = covers[: len(covers) - MAX_COVERS]
+                for old in to_delete:
+                    try:
+                        os.remove(old)
+                        print(f"🧹 Удалён старый cover: {old}")
+                    except Exception:
+                        pass
+        except Exception as rot_e:
+            print(f"⚠️ Ошибка ротации обложек: {rot_e}")
+
+        print(f"Изображение сохранено: {unique_name} (и обновлён {filename})")
         return filename
     except Exception as exc:
         print(f"Ошибка получения изображения: {exc}")

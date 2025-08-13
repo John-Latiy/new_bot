@@ -29,6 +29,9 @@ FREEIMAGE_API_KEY = os.getenv("FREEIMAGE_API_KEY")
 # Unsplash (legacy)
 UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
 
+# Image retention (optional)
+MAX_COVERS = int(os.getenv("MAX_COVERS", "50"))
+
 # Pixabay
 PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
 
