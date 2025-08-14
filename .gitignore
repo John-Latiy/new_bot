@@ -69,6 +69,17 @@ venv.bak/
 
 # Logs
 *.log
+logs/
+
+# Project data artifacts
+data/processed.db
+data/covers/
+parser.session
+*.session
+
+# Images/outputs
+data/final_cover.png
+
 
 # SQLite
 *.sqlite3

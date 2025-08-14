@@ -33,5 +33,10 @@ UNSPLASH_ACCESS_KEY = os.getenv("UNSPLASH_ACCESS_KEY")
 MAX_COVERS = int(os.getenv("MAX_COVERS", "50"))
 
 # Pixabay
-PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
+# Support both canonical and common lowercase variants in existing .env files
+PIXABAY_API_KEY = (
+	os.getenv("PIXABAY_API_KEY")
+	or os.getenv("pixabay_API_KEY")
+	or os.getenv("PIXABAY_api_key")
+)
 
