@@ -4,6 +4,8 @@ import random
 from typing import Optional
 
 import requests
+from io import BytesIO
+from PIL import Image
 from openai import OpenAI
 
 from config.settings import OPENAI_API_KEY, PIXABAY_API_KEY, MAX_COVERS
@@ -239,17 +241,25 @@ def generate_image(
 
         # Определяем уникальное имя
         os.makedirs("data/covers", exist_ok=True)
-        # Извлечём id из URL (цифры перед _1280 / .jpg) как image_id
+        # Извлечём id из URL (хэш/числа перед _<size> .jpg/.jpeg/.png)
         uniq_id = None
-        match = re.search(r"/(g?[0-9a-f]{10,}|\d+)_\d+\.jpg", image_url)
+        match = re.search(r"/get/([^/_]+)_\d+\.(?:jpg|jpeg|png)$", image_url, re.IGNORECASE)
         if match:
             uniq_id = match.group(1)
         if not uniq_id:
-            uniq_id = re.sub(r"\W+", "", search_query.lower())[:20]
+            # Фолбэк: хэш URL, чтобы гарантировать уникальность
+            import hashlib
+            uniq_id = hashlib.sha1(image_url.encode("utf-8")).hexdigest()[:40]
         unique_name = f"data/covers/{uniq_id}.png"
 
-        with open(unique_name, "wb") as f:
-            f.write(resp.content)
+        # Перекодируем в PNG, чтобы расширение совпадало с содержимым
+        try:
+            img = Image.open(BytesIO(resp.content)).convert("RGB")
+            img.save(unique_name, format="PNG")
+        except Exception:
+            # Если Pillow не смог декодировать — пишем как есть
+            with open(unique_name, "wb") as f:
+                f.write(resp.content)
         mark_file_saved(unique_name)
 
         # Синхронизируем совместимый путь final_cover.png
@@ -282,7 +292,7 @@ def generate_image(
             print(f"⚠️ Ошибка ротации обложек: {rot_e}")
 
         print(f"Изображение сохранено: {unique_name} (и обновлён {filename})")
-        return filename
+        return unique_name
     except Exception as exc:
         print(f"Ошибка получения изображения: {exc}")
         return None
