@@ -1,0 +1,20 @@
+services:
+  new_bot:
+    build: .
+    container_name: new_bot
+    # Default CMD in Dockerfile already runs scheduler; keep explicit for clarity
+    command: ["python", "-u", "scheduler.py"]
+    env_file:
+      - .env
+    environment:
+      - TZ=Europe/Moscow
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./sessions:/app/sessions
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

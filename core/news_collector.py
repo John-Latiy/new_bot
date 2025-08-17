@@ -1,3 +1,4 @@
+import os
 from telethon.sync import TelegramClient
 from telethon.tl.functions.messages import GetHistoryRequest
 from config.settings import TELEGRAM_API_ID, TELEGRAM_API_HASH
@@ -5,7 +6,9 @@ import sqlite3
 from utils.hash_utils import get_hash
 import pytz
 
-client = TelegramClient("parser", TELEGRAM_API_ID, TELEGRAM_API_HASH)
+SESSION_DIR = os.path.join("sessions")
+os.makedirs(SESSION_DIR, exist_ok=True)
+client = TelegramClient(os.path.join(SESSION_DIR, "parser"), TELEGRAM_API_ID, TELEGRAM_API_HASH)
 
 CHANNELS = [
     "https://t.me/markettwits",
@@ -47,6 +50,15 @@ async def fetch_new_posts(start_time=None, end_time=None, limit_per_channel=20):
                     continue
 
                 message_time = message.date.astimezone(pytz.timezone("Europe/Moscow"))
+
+                # Apply time window filter if provided
+                if start_time is not None and end_time is not None:
+                    try:
+                        if not (start_time <= message_time <= end_time):
+                            continue
+                    except Exception:
+                        # In case of tz-aware mismatches, skip silently
+                        continue
 
                 content = message.message.strip()
 

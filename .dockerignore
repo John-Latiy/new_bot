@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+# Local data/logs (mounted via volumes)
+logs/
+data/
+
+# Git
+.git/
+.gitignore
+
+# OS/editor
+.DS_Store
+.vscode/
+.idea/
+
+# Secrets
+.env
