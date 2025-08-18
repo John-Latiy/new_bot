@@ -14,6 +14,7 @@ from utils.image_registry import (
     mark_used,
     is_file_saved,
     mark_file_saved,
+    has_file_hash,
 )
 
 
@@ -233,7 +234,18 @@ def generate_image(
     try:
         print("Поиск изображения (Pixabay)...")
         search_query = generate_search_query(prompt)
-        image_url = search_pixabay_image(search_query)
+        # Подстрахуемся от повторов: до 3 попыток с разными вариантами запроса
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                image_url = search_pixabay_image(search_query)
+                break
+            except Exception as e:
+                last_error = e
+                # добавим шум к запросу на следующую попытку
+                search_query = enrich_query(search_query + f" {attempt}")[:80]
+        else:
+            raise last_error or RuntimeError("No image found")
 
         print("Загружаем изображение...")
         resp = requests.get(image_url, timeout=30)
@@ -253,11 +265,33 @@ def generate_image(
         unique_name = f"data/covers/{uniq_id}.png"
 
         # Перекодируем в PNG, чтобы расширение совпадало с содержимым
+        # Проверим хэш содержимого до сохранения, чтобы не повторять обложки
+        import hashlib
+        content_hash = hashlib.sha256(resp.content).hexdigest()
+        if has_file_hash(content_hash):
+            print("⚠️ Скачанное изображение ранее уже использовалось (по содержимому). Пробуем другой вариант...")
+            # Вторая попытка: другой вариант запроса
+            try:
+                alt_query = enrich_query(search_query + " finance markets")[:80]
+                image_url = search_pixabay_image(alt_query)
+                resp = requests.get(image_url, timeout=30)
+                resp.raise_for_status()
+                content_hash = hashlib.sha256(resp.content).hexdigest()
+                if has_file_hash(content_hash):
+                    print("⚠️ Повтор и по альтернативе. Оставляем как есть, чтобы не зациклиться.")
+                else:
+                    # обновим uniq_id по второму URL
+                    match = re.search(r"/get/([^/_]+)_\d+\.(?:jpg|jpeg|png)$", image_url, re.IGNORECASE)
+                    if match:
+                        uniq_id = match.group(1)
+                    unique_name = f"data/covers/{uniq_id}.png"
+            except Exception as _e:
+                pass
+
         try:
             img = Image.open(BytesIO(resp.content)).convert("RGB")
             img.save(unique_name, format="PNG")
         except Exception:
-            # Если Pillow не смог декодировать — пишем как есть
             with open(unique_name, "wb") as f:
                 f.write(resp.content)
         mark_file_saved(unique_name)

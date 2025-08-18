@@ -92,3 +92,16 @@ def mark_file_saved(filename: str) -> None:
             (filename, file_hash),
         )
         conn.commit()
+
+
+def has_file_hash(file_hash: str) -> bool:
+    """Return True if a file with the given content hash was already saved."""
+    if not file_hash:
+        return False
+    _ensure_db()
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute(
+            "SELECT 1 FROM saved_files WHERE file_hash=? LIMIT 1",
+            (file_hash,),
+        )
+        return cur.fetchone() is not None
