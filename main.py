@@ -151,7 +151,8 @@ async def main():
     # Публикация в Instagram
     print("📸 Публикация в Instagram...")
     try:
-        publish_to_instagram(image_url, summary)
+        # Передаём путь к локальному файлу для корректной обработки aspect ratio
+        publish_to_instagram(image_url, summary, image_path)
         print("✅ Пост опубликован в Instagram")
     except Exception as e:
         print(f"❌ Ошибка публикации в Instagram: {e}")
