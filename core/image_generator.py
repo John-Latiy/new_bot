@@ -1,7 +1,7 @@
 import os
 import re
 import random
-from typing import Optional
+from typing import Optional, List
 
 import requests
 from io import BytesIO
@@ -122,23 +122,83 @@ def generate_search_query(summary: str) -> str:
         return query or "finance business"
     except Exception as exc:
         print(f"Ошибка генерации поискового запроса: {exc}")
-        return "finance business"
+    return "finance business"
 
 
 """
 Оставлена только интеграция с Pixabay. Путь Pexels удалён.
+Расширена генерация: поддержка нескольких базовых запросов от GPT.
 """
+
+
+def generate_search_candidates(summary: str) -> List[str]:
+    """Возвращает 5-10 коротких англ. запросов (тегов) на основе сводки.
+    Пример ответа GPT: "trading floor, candlestick chart, stock exchange, financial district, bull and bear, gold bars, oil barrels, central bank, press conference".
+    """
+    try:
+        resp = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            temperature=0.4,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Ты помощник по поиску реальных фото для финансовой темы. "
+                        "Верни 6-10 коротких АНГЛИЙСКИХ фраз (1-3 слова каждая), через запятую. "
+                        "Фокус: рынки/трейдинг/деньги/банки/сырьё/экономика: trading floor, candlestick chart, stock exchange, trader at desk, financial district skyline, bull and bear, gold bars, oil barrels, energy market, central bank building, press conference, newspaper finance section. "
+                        "Игнорируй электронику и железо (computer, PSU, cable). Верни только список, без пояснений."
+                    ),
+                },
+                {"role": "user", "content": summary},
+            ],
+        )
+        raw = resp.choices[0].message.content or ""
+        # Разделим по запятым/строкам
+        parts = re.split(r"[,\n]+", raw)
+        clean = []
+        seen = set()
+        for p in parts:
+            q = sanitize_query(p)
+            if not q:
+                continue
+            q = enrich_query(q)
+            k = q.lower()
+            if k in seen:
+                continue
+            seen.add(k)
+            clean.append(q)
+            if len(clean) >= 10:
+                break
+        # Если ничего не вышло — подстрахуемся базой
+        if not clean:
+            clean = ["trading floor", "stock market", "candlestick chart", "financial district", "stock exchange building"]
+        return clean
+    except Exception as exc:
+        print(f"Ошибка генерации списка поисковых запросов: {exc}")
+        return ["trading floor", "stock market", "candlestick chart", "banking"]
 
 
 def _expand_query_variants(base: str) -> list:
     base = enrich_query(base)
     extras = [
         "trading floor",
+        "trader at desk",
         "candlestick chart",
         "stock market",
+        "stock exchange",
+        "ticker",
         "financial markets",
+        "financial district",
         "banking",
+        "central bank",
+        "press conference",
+        "newspaper finance",
+        "bull and bear",
+        "gold bars",
+        "oil barrels",
+        "energy market",
         "forex trading",
+        "cryptocurrency market",
     ]
     variants = [base]
     for e in extras:
@@ -152,10 +212,10 @@ def _expand_query_variants(base: str) -> list:
         if k not in seen:
             seen.add(k)
             uniq.append(v)
-    return uniq[:6]
+    return uniq[:10]
 
 
-def search_pixabay_image(query: str) -> str:
+def search_pixabay_image(query) -> str:
     """Ищет изображение на Pixabay и возвращает прямой URL.
     Улучшено: собираем все новые подходящие изображения и случайно
     выбираем одно, чтобы снизить повторяемость.
@@ -166,16 +226,32 @@ def search_pixabay_image(query: str) -> str:
         url = "https://pixabay.com/api/"
         params = {
             "key": PIXABAY_API_KEY or "",
-            "q": enrich_query(query),
+            # q зададим ниже по вариантам
             "image_type": "photo",
-            "orientation": "horizontal",
+            "orientation": "all",
             "safesearch": "true",
             "per_page": 20,
             "order": "popular",
-            "category": "business",
             "lang": "en",
         }
-        variants = _expand_query_variants(query)
+        base_list: List[str]
+        if isinstance(query, (list, tuple)):
+            base_list = list(query)
+        else:
+            base_list = [str(query)]
+
+        # Сформируем общий пул вариантов на основе всех базовых запросов
+        variants: List[str] = []
+        for base in base_list:
+            variants.extend(_expand_query_variants(base))
+        # Добавим слегка зашумлённые варианты
+        rand_suffix = ["global markets", "economy", "wall street", "business"]
+        for b in base_list[:3]:
+            for s in rand_suffix:
+                v = enrich_query(f"{b} {s}")[:80]
+                if v.lower() not in [x.lower() for x in variants]:
+                    variants.append(v)
+
         total_used_skipped = 0
         for idx, variant in enumerate(variants, 1):
             pv = {**params, "q": variant}
@@ -233,18 +309,20 @@ def generate_image(
     """
     try:
         print("Поиск изображения (Pixabay)...")
-        search_query = generate_search_query(prompt)
-        # Подстрахуемся от повторов: до 3 попыток с разными вариантами запроса
+        candidates = generate_search_candidates(prompt)
+        # Подстрахуемся от повторов: до 3 волн с дополнительным шумом
         last_error = None
+        image_url = None
         for attempt in range(1, 4):
             try:
-                image_url = search_pixabay_image(search_query)
+                image_url = search_pixabay_image(candidates)
                 break
             except Exception as e:
                 last_error = e
-                # добавим шум к запросу на следующую попытку
-                search_query = enrich_query(search_query + f" {attempt}")[:80]
-        else:
+                # добавим шум к каждому кандидату
+                noisy = [enrich_query(f"{c} {random.choice(['global', 'markets', 'finance', 'economy'])}")[:80] for c in candidates]
+                candidates = list(dict.fromkeys(noisy))  # dedup, сохранить порядок
+        if not image_url:
             raise last_error or RuntimeError("No image found")
 
         print("Загружаем изображение...")
