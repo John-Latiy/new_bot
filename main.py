@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+import os
 
 from utils.time_windows import get_time_range_for_mode
 from core.news_collector import fetch_new_posts
@@ -130,6 +131,44 @@ async def main():
             "error": str(e),
         })
         return
+
+    # Подстраховка: если генератор вернул пустой путь или файл не существует — используем фолбэк
+    if not image_path or not os.path.exists(image_path):
+        print("⚠️ Обложка не сгенерирована — используем резервное изображение.")
+        fallback_candidates = [
+            "data/final_cover.png",
+            "data/logo.jpg",
+        ]
+        fallback_used = None
+        for cand in fallback_candidates:
+            if os.path.exists(cand):
+                image_path = cand
+                fallback_used = cand
+                break
+        if not fallback_used:
+            # Создадим простую заглушку
+            try:
+                from PIL import Image, ImageDraw, ImageFont
+                img = Image.new("RGB", (1080, 1350), (18, 18, 24))
+                draw = ImageDraw.Draw(img)
+                title = "Markets Update"
+                body = "Короткий выпуск: ключевые тренды и события дня."
+                font = ImageFont.load_default()
+                draw.text((40, 100), title, fill=(230, 230, 230), font=font)
+                draw.text((40, 160), body, fill=(200, 200, 200), font=font)
+                os.makedirs("data", exist_ok=True)
+                placeholder = "data/final_cover.png"
+                img.save(placeholder, format="PNG")
+                image_path = placeholder
+                fallback_used = placeholder
+            except Exception:
+                pass
+        log_post_event({
+            "mode": mode,
+            "stage": "image",
+            "status": "fallback_used" if fallback_used else "fallback_missing",
+            "path": image_path,
+        })
 
     # Загрузка изображения на FreeImage.host
     try:
