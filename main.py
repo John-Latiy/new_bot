@@ -20,6 +20,11 @@ def parse_args():
         choices=["morning", "midday", "evening"],
         help="Mode of the day"
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Proceed even if no news found for the time window (use fallback summary)."
+    )
     return parser.parse_args()
 
 
@@ -38,15 +43,26 @@ async def main():
         limit_per_channel=10
     )
     if not raw_posts:
-        print("⚠️ Нет новостей за указанный период.")
-        log_post_event({
-            "mode": mode,
-            "stage": "collect",
-            "status": "no_posts",
-            "start_time": str(start_time),
-            "end_time": str(end_time),
-        })
-        return
+        if not args.force:
+            print("⚠️ Нет новостей за указанный период.")
+            log_post_event({
+                "mode": mode,
+                "stage": "collect",
+                "status": "no_posts",
+                "start_time": str(start_time),
+                "end_time": str(end_time),
+            })
+            return
+        else:
+            print("⚠️ Нет новостей за окно — включаю принудительный режим и публикую краткий дайджест.")
+            log_post_event({
+                "mode": mode,
+                "stage": "collect",
+                "status": "no_posts_forced_publish",
+                "start_time": str(start_time),
+                "end_time": str(end_time),
+                "force": True,
+            })
     else:
         log_post_event({
             "mode": mode,
@@ -60,7 +76,15 @@ async def main():
     # Генерация текста
     print("📝 GPT формирует связную сводку...")
     try:
-        summary = generate_summary(raw_posts)
+        if raw_posts:
+            summary = generate_summary(raw_posts)
+        else:
+            # Принудительный фолбэк, если постов нет — краткий шаблон
+            summary = (
+                '"Краткий утренний дайджест"\n'
+                "Сегодня публикуем сокращённый выпуск: продолжение ключевых трендов на мировых рынках, нефть и золото остаются в фокусе, внимание к решениям центробанков и корпоративной отчётности.\n\n"
+                "#Экономика #Финансы #Рынки"
+            )
         print(f"\n📢 Сформированная сводка:\n\n{summary}\n")
     except Exception as e:
         print(f"⚠️ Ошибка генерации сводки: {e}\n")
