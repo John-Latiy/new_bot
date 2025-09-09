@@ -34,42 +34,33 @@ def sanitize_query(q: str) -> str:
 
 # Тематические фильтры
 FINANCE_WHITELIST = [
-    "finance",
-    "financial",
-    "stock",
-    "stocks",
-    "market",
-    "stock market",
-    "trading",
-    "trader",
-    "chart",
-    "charts",
-    "candlestick",
-    "ticker",
-    "forex",
-    "exchange",
-    "economy",
-    "bank",
-    "money",
-    "investment",
+    # ключевые финансово-рыночные термины
+    "finance", "financial", "stock", "stocks", "market", "stock market",
+    "trading", "trader", "chart", "charts", "candlestick", "ticker",
+    "forex", "exchange", "economy", "economic", "bank", "banking",
+    "money", "investment", "invest", "investing", "gold", "oil",
+    "commodity", "commodities", "energy", "currency", "currencies",
+    "wall street", "bull", "bear", "etf"
 ]
 
+# Расширяем чёрный список: железо + природа/грибы/животные, чтобы отсечь нерелевант
 BLACKLIST = [
-    "power supply",
-    "psu",
-    "computer",
-    "motherboard",
-    "gpu",
-    "cpu",
-    "cable",
-    "plug",
-    "socket",
-    "server",
-    "electronics",
+    # железо / IT
+    "power supply", "psu", "computer", "motherboard", "gpu", "cpu",
+    "cable", "plug", "socket", "server", "electronics",
+    # природа и отвлекающие темы
+    "mushroom", "mushrooms", "forest", "tree", "trees", "leaf", "leaves",
+    "flower", "flowers", "bloom", "mountain", "mountains", "landscape",
+    "river", "lake", "sea", "ocean", "nature", "butterfly", "insect",
+    "animal", "animals", "bird", "birds", "cat", "dog", "doge",
+    "squirrel", "deer", "fox", "horse",
 ]
 
 
 def is_finance_related(text: str) -> bool:
+    """Проверяем, присутствует ли ХОТЯ БЫ один финансовый термин.
+    Используем подстрочное включение (Pixabay tags идут через запятую).
+    """
     t = (text or "").lower()
     return any(w in t for w in FINANCE_WHITELIST)
 
@@ -86,8 +77,9 @@ def enrich_query(q: str) -> str:
         q = re.sub(rf"\b{re.escape(b)}\b", "", q, flags=re.IGNORECASE)
     q = q.strip()
     # Добавим якорь тематики, если не хватает
-    if not is_finance_related(q):
-        q = (q + " stock market").strip()
+    # НЕ добавляем автоматически "stock market" если вообще нет финансовых терминов:
+    # вместо этого позволим фильтру позже отклонить нерелевант.
+    # (Ранее автоматическое добавление делало любой запрос финансовым и пропускало нерелевантные фото.)
     return q
 
 
@@ -230,9 +222,10 @@ def search_pixabay_image(query) -> str:
             "image_type": "photo",
             "orientation": "all",
             "safesearch": "true",
-            "per_page": 20,
+            "per_page": 30,
             "order": "popular",
             "lang": "en",
+            "category": "business",  # сузим выдачу к бизнес/финансам
         }
         base_list: List[str]
         if isinstance(query, (list, tuple)):
@@ -271,7 +264,14 @@ def search_pixabay_image(query) -> str:
                     used_skipped += 1
                     continue
                 tags = h.get("tags") or ""
-                if has_blacklisted(tags) or not is_finance_related(tags + " " + variant):
+                # Применяем более строгий фильтр: теги САМИ должны содержать фин. термины
+                # (не засчитываем добавленные слова из variant).
+                if has_blacklisted(tags):
+                    continue
+                if not is_finance_related(tags):
+                    # Попробуем также описание через сочетание title-like полей если есть
+                    # (в API есть 'tags' только, поэтому просто логируем пропуск)
+                    print(f"⏭️  Пропуск: нет финансовых тегов -> {tags[:80]}")
                     continue
                 image_url = (
                     h.get("largeImageURL")
